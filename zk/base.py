@@ -947,27 +947,41 @@ class ZK(object):
                     raise ZKErrorResponse("Can't find user")
         if isinstance(fingers, Finger):
             fingers = [fingers]
+        self.HR_save_usertemplates ([(user, fingers)])
+
+    def HR_save_usertemplates(self, usertemplates):
+        """
+        save users and templates in high rate mode
+
+        :param [user,[fingers]]
+        """
+        upack = b""
         fpack = b""
         table = b""
         fnum = 0x10
         tstart = 0
-        for finger in fingers:
-            tfp = finger.repack_only()
-            table += pack("<bHbI", 2, user.uid, fnum + finger.fid, tstart)
-            tstart += len(tfp)
-            fpack += tfp
-        if self.user_packet_size == 28:
-            upack = user.repack29()
-        else:
-            upack = user.repack73()
+        for user, fingers in usertemplates:
+            if not isinstance(user, User):
+                raise ZKErrorResponse("Invalid user in usertemplates list")
+            if self.user_packet_size == 28:
+                upack += user.repack29()
+            else:
+                upack += user.repack73()
+            for finger in fingers:
+                if not isinstance(finger, Finger):
+                    raise ZKErrorResponse("Invalid finger template in usertemplates list")
+                tfp = finger.repack_only()
+                table += pack("<bHbI", 2, user.uid, fnum + finger.fid, tstart)
+                tstart += len(tfp)
+                fpack += tfp
         head = pack("III", len(upack), len(table), len(fpack))
         packet = head + upack + table + fpack
         self._send_with_buffer(packet)
-        command = 110
+        command = const._CMD_SAVE_USERTEMPS
         command_string = pack('<IHH', 12,0,8)
         cmd_response = self.__send_command(command, command_string)
         if not cmd_response.get('status'):
-            raise ZKErrorResponse("Can't save utemp")
+            raise ZKErrorResponse("Can't save usertemplates")
         self.refresh_data()
 
     def _send_with_buffer(self, buffer):
@@ -1005,7 +1019,7 @@ class ZK(object):
         :return: bool
         """
         if self.tcp and user_id:
-            command = 134
+            command = const._CMD_DEL_USER_TEMP
             command_string = pack('<24sB', str(user_id), temp_id)
             cmd_response = self.__send_command(command, command_string)
             if cmd_response.get('status'):
@@ -1062,7 +1076,7 @@ class ZK(object):
                 return False
             uid = users[0].uid
         for _retries in range(3):
-            command = 88 # command secret!!! GET_USER_TEMPLATE
+            command = const._CMD_GET_USERTEMP # command secret!!! GET_USER_TEMPLATE
             command_string = pack('hb', uid, temp_id)
             response_size = 1024 + 8
             cmd_response = self.__send_command(command, command_string, response_size)
@@ -1331,16 +1345,25 @@ class ZK(object):
                 if not len(data):
                     if self.verbose: print ("empty")
                     continue
-                while len(data) >= 12:
-                    if len(data) == 12:
+                while len(data) >= 10:
+                    if len(data) == 10:
+                        user_id, status, punch, timehex = unpack('<HBB6s', data)
+                        data = data[10:]
+                    elif len(data) == 12:
                         user_id, status, punch, timehex = unpack('<IBB6s', data)
                         data = data[12:]
+                    elif len(data) == 14:
+                        user_id, status, punch, timehex, _other = unpack('<HBB6s4s', data)
+                        data = data[14:]
                     elif len(data) == 32:
                         user_id,  status, punch, timehex = unpack('<24sBB6s', data[:32])
                         data = data[32:]
                     elif len(data) == 36:
                         user_id,  status, punch, timehex, _other = unpack('<24sBB6s4s', data[:36])
                         data = data[36:]
+                    elif len(data) == 37:
+                        user_id,  status, punch, timehex, _other = unpack('<24sBB6s5s', data[:37])
+                        data = data[37:]
                     elif len(data) >= 52:
                         user_id,  status, punch, timehex, _other = unpack('<24sBB6s20s', data[:52])
                         data = data[52:]
@@ -1515,7 +1538,7 @@ class ZK(object):
         read a chunk from buffer
         """
         for _retries in range(3):
-            command = 1504
+            command = const._CMD_READ_BUFFER
             command_string = pack('<ii', start, size)
             if self.tcp:
                 response_size = size + 32
@@ -1541,7 +1564,7 @@ class ZK(object):
         response_size = 1024
         data = []
         start = 0
-        cmd_response = self.__send_command(1503, command_string, response_size)
+        cmd_response = self.__send_command(const._CMD_PREPARE_BUFFER, command_string, response_size)
         if not cmd_response.get('status'):
             raise ZKErrorResponse("RWB Not supported")
         if cmd_response['code'] == const.CMD_DATA:
@@ -1591,7 +1614,7 @@ class ZK(object):
             if self.verbose: print ("WRN: no attendance data")
             return []
         total_size = unpack("I", attendance_data[:4])[0]
-        record_size = total_size/self.records
+        record_size = total_size // self.records
         if self.verbose: print ("record_size is ", record_size)
         attendance_data = attendance_data[4:]
         if record_size == 8:
@@ -1637,7 +1660,7 @@ class ZK(object):
 
                 attendance = Attendance(user_id, timestamp, status, punch, uid)
                 attendances.append(attendance)
-                attendance_data = attendance_data[40:]
+                attendance_data = attendance_data[record_size:]
         return attendances
 
     def clear_attendance(self):
