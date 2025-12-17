@@ -198,6 +198,50 @@ conn.clear_attendance()
 
 * Test voice
 
+---
+
+# Desktop App (PyQt5) – ZKTeco Manager
+
+This repository now includes a PyQt5 desktop app scaffold inspired by ZKTime.Net 3.0. It connects to ZKTeco terminals via `pyzk` and persists data in SQLite.
+
+## Run the App
+
+```bash
+# Optional: virtual environment
+python -m venv .venv
+. .venv/Scripts/activate  # On Windows PowerShell: .venv\Scripts\Activate.ps1
+
+pip install PyQt5
+python app.py
+```
+
+## Structure
+- app.py (entrypoint)
+- ui/
+    - main_window.py (QMainWindow with module tabs and toolbar)
+    - views/
+        - terminal_card.py (Device table, connect/disconnect, download)
+        - employee_card.py (Employee table in SQLite, CSV export)
+        - reports_card.py (Reports placeholder)
+- dialogs/
+    - device_dialog.py (add/edit device with validation)
+- widgets/
+    - message_toast.py (bottom-right toast/console with history)
+- services/
+    - zk_service.py (connect/info/users/attendance/clear attendance)
+    - download_service.py (persist events in SQLite)
+    - sync_service.py (placeholder)
+- data/
+    - db.py (SQLite init and tables)
+    - models.py (dataclasses)
+    - repositories.py (CRUD operations)
+- workers/
+    - base_worker.py (QObject + QThread runner)
+    - zk_workers.py (Connect/Disconnect/Download workers)
+- config.py (basic settings)
+
+Icons (optional): run `python scripts/fetch_bootstrap_icons.py` to download a small set of Bootstrap Icons into `assets/icons/`.
+
 ```python
 """
  play test voice:
